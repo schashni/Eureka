@@ -367,7 +367,7 @@ class ShadowHandGPT(VecTask):
         self.goal_object_indices = to_torch(self.goal_object_indices, dtype=torch.long, device=self.device)
 
     def compute_reward(self, actions):
-        self.rew_buf[:], self.rew_dict = compute_reward(self.object_rot, self.goal_rot, self.fingertip_pos, self.object_pos)
+        self.rew_buf[:], self.rew_dict = compute_reward(self.object_pos, self.goal_pos)
         self.extras['gpt_reward'] = self.rew_buf.mean()
         for rew_state in self.rew_dict: self.extras[rew_state] = self.rew_dict[rew_state].mean()
         self.rew_buf[:] = compute_bonus(
@@ -763,32 +763,22 @@ import math
 import torch
 from torch import Tensor
 @torch.jit.script
-def compute_reward(object_rot: torch.Tensor, goal_rot: torch.Tensor, fingertip_pos: torch.Tensor, object_pos: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-    device = object_rot.device
-    
-    # Distance between object rotation and goal rotation
-    object_goal_rot_diff = torch.norm(object_rot - goal_rot, dim=1)
-    
-    # Distance between each fingertip and the object
-    fingertip_object_diff = torch.norm(fingertip_pos - object_pos.unsqueeze(1), dim=2)
-    avg_fingertip_object_diff = fingertip_object_diff.mean(dim=1)
-    
-    # Reward Components
-    rot_reward = -object_goal_rot_diff
-    fingertip_reward = -avg_fingertip_object_diff
-    
-    # Temperature parameters for reward normalization
-    rot_temperature = torch.tensor(1.0).to(device)
-    fingertip_temperature = torch.tensor(1.0).to(device)
-    
-    # Normalize reward components using exponential function
-    rot_reward_normalized = torch.exp(rot_reward / rot_temperature)
-    fingertip_reward_normalized = torch.exp(fingertip_reward / fingertip_temperature)
-    
-    # Combine normalized rewards
-    total_reward = rot_reward_normalized + fingertip_reward_normalized
-    
-    # Store individual reward components in a dictionary
-    reward_dict = {"rot_reward": rot_reward_normalized, "fingertip_reward": fingertip_reward_normalized}
-    
-    return total_reward, reward_dict
+def compute_reward(object_pos: torch.Tensor, goal_pos: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+
+    # Calculate the angular error between the object and the goal
+    angular_error = torch.norm(quat_mul(object_rot, quat_conjugate(goal_rot)) - goal_rot, dim=1)
+
+    # Normalize the reward to a range between 0 and 1
+    normalized_reward = torch.exp(-0.1 * angular_error)
+
+    # Calculate the distance error between the object and the goal
+    distance_error = torch.norm(object_pos - goal_pos)
+
+    # Add a penalty for large distance errors
+    distance_penalty = torch.max(0, distance_error - 1.0)
+
+    # Combine the normalized reward and the distance penalty
+    total_reward = normalized_reward - distance_penalty
+
+    # Return the total reward and a dictionary of individual reward components
+    return total_reward, {"angular_error": angular_error, "distance_error": distance_error, "distance_penalty": distance_penalty}

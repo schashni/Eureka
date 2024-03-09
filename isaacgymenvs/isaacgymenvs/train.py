@@ -48,7 +48,7 @@ from isaacgymenvs.utils.utils import set_np_formatting, set_seed
 
 # ROOT_DIR = os.getcwd()
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
-
+print(ROOT_DIR)
 def preprocess_train_config(cfg, config_dict):
     """
     Adding common configuration parameters to the rl_games train config.
