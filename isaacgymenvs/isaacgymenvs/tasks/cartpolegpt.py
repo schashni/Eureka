@@ -87,7 +87,7 @@ class CartpoleGPT(VecTask):
             self.cartpole_handles.append(cartpole_handle)
 
     def compute_reward(self):
-        self.rew_buf[:], self.rew_dict = compute_reward(self.cart_position, self.pole_angular_position)
+        self.rew_buf[:], self.rew_dict = compute_reward(self.object_pos, self.goal_pos)
         self.extras['gpt_reward'] = self.rew_buf.mean()
         for rew_state in self.rew_dict: self.extras[rew_state] = self.rew_dict[rew_state].mean()
         pole_angle = self.obs_buf[:, 2]
@@ -173,6 +173,29 @@ import math
 import torch
 from torch import Tensor
 @torch.jit.script
-def compute_reward(cart_position: torch.Tensor, pole_angular_position: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-    reward_function = CartpoleReward().forward
-    return reward_function(cart_position, pole_angular_position)
+def compute_reward(object_pos: torch.Tensor, goal_pos: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    # type: (Tensor, Tensor) -> Tuple[Tensor, Dict[str, Tensor]]
+
+    # Reward components
+    pole_angle = object_pos[:, 2]  # Angle of the pole with respect to the vertical axis
+    cart_vel = object_pos[:, 1]  # Velocity of the cart in the horizontal direction
+
+    # Normalized reward based on pole angle and cart velocity
+    reward = 1.0 - pole_angle * pole_angle - 0.01 * torch.abs(cart_vel) - 0.005 * torch.abs(object_pos[:, 0])
+
+    # Penalize falling pole
+    reward = torch.where(torch.abs(object_pos) > reset_dist, torch.ones_like(reward) * -2.0, reward)
+    reward = torch.where(torch.abs(pole_angle) > np.pi / 2, torch.ones_like(reward) * -2.0, reward)
+
+    # Penalize exceeding maximum episode length or reaching a consecutive success threshold
+    reset = torch.where(torch.abs(object_pos) > reset_dist, torch.ones_like(reset_buf), reset_buf)
+    reset = torch.where(torch.abs(pole_angle) > np.pi / 2, torch.ones_like(reset_buf), reset)
+    reset = torch.where(progress_buf >= max_episode_length - 1, torch.ones_like(reset_buf), reset)
+
+    # Calculate total reward and additional components
+    if reset.sum() > 0:
+        consecutive_successes = (progress_buf.float() * reset).sum() / reset.sum()
+    else:
+        consecutive_successes = torch.zeros_like(consecutive_successes).mean()
+
+    return reward, {"consecutive_successes": consecutive_successes}

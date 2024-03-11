@@ -69,9 +69,10 @@ def main(cfg):
     execution_error_feedback = file_to_string(f'{prompt_dir}/execution_error_feedback.txt')
 
     initial_system = initial_system.format(task_reward_signature_string=reward_signature) + code_output_tip
+    # initial_user = initial_user.format(task_obs_code_string=task_obs_code_string, task_description=task_description)
     initial_user = initial_user.format(task_obs_code_string=task_obs_code_string, task_description=task_description)
     combined_user_message = initial_system + "\n" + initial_user
-    messages = [{"role": "user", "content": combined_user_message}]
+    # messages = [{"role": "user", "content": combined_user_message}]
 
     task_code_string = task_code_string.replace(task, task+suffix)
     # Create Task YAML files
@@ -103,8 +104,7 @@ def main(cfg):
                 break
             for attempt in range(1000):
                 try:
-                    responses = query_model(messages, chunk_size)
-
+                    responses = query_model(combined_user_message, chunk_size)
                     total_samples += chunk_size
                     break
                 except Exception as e:
@@ -232,6 +232,7 @@ def main(cfg):
                 content = execution_error_feedback.format(traceback_msg="Code Run cannot be executed due to function signature error! Please re-write an entirely new reward function!")
                 content += code_output_tip
                 contents.append(content)
+
                 successes.append(DUMMY_FAILURE)
                 reward_correlations.append(DUMMY_FAILURE)
                 continue
