@@ -174,28 +174,20 @@ import torch
 from torch import Tensor
 @torch.jit.script
 def compute_reward(object_pos: torch.Tensor, goal_pos: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-    # type: (Tensor, Tensor) -> Tuple[Tensor, Dict[str, Tensor]]
+    # Normalize pole position to range [0, 1]
+    object_pos_norm = (object_pos - goal_pos) / (goal_pos.max() - goal_pos.min())
 
-    # Reward components
-    pole_angle = object_pos[:, 2]  # Angle of the pole with respect to the vertical axis
-    cart_vel = object_pos[:, 1]  # Velocity of the cart in the horizontal direction
+    # Reward for keeping the pole upright
+    reward_upright = torch.nn.functional.smooth_L1(object_pos_norm, beta=1.0)
 
-    # Normalized reward based on pole angle and cart velocity
-    reward = 1.0 - pole_angle * pole_angle - 0.01 * torch.abs(cart_vel) - 0.005 * torch.abs(object_pos[:, 0])
+    # Penalize distance from the goal position
+    reward_distance = -torch.nn.functional.l1_loss(object_pos, goal_pos)
 
-    # Penalize falling pole
-    reward = torch.where(torch.abs(object_pos) > reset_dist, torch.ones_like(reward) * -2.0, reward)
-    reward = torch.where(torch.abs(pole_angle) > np.pi / 2, torch.ones_like(reward) * -2.0, reward)
+    # Reward for staying on the track
+    reward_track = torch.nn.functional.smooth_L1(object_pos_norm, beta=1.0)
 
-    # Penalize exceeding maximum episode length or reaching a consecutive success threshold
-    reset = torch.where(torch.abs(object_pos) > reset_dist, torch.ones_like(reset_buf), reset_buf)
-    reset = torch.where(torch.abs(pole_angle) > np.pi / 2, torch.ones_like(reset_buf), reset)
-    reset = torch.where(progress_buf >= max_episode_length - 1, torch.ones_like(reset_buf), reset)
+    # Total reward
+    reward = reward_upright + reward_distance + reward_track
 
-    # Calculate total reward and additional components
-    if reset.sum() > 0:
-        consecutive_successes = (progress_buf.float() * reset).sum() / reset.sum()
-    else:
-        consecutive_successes = torch.zeros_like(consecutive_successes).mean()
-
-    return reward, {"consecutive_successes": consecutive_successes}
+    # Return reward and components
+    return reward, {"reward_upright": reward_upright, "reward_distance": reward_distance, "reward_track": reward_track}

@@ -23,24 +23,24 @@ ISAAC_ROOT_DIR = f"{EUREKA_ROOT_DIR}/../isaacgymenvs/isaacgymenvs"
 import requests
 
 
-# def query_model(prompt, number_responses=1):
-#     url = 'http://127.0.0.1:5000/generate'
-#
-#     response = requests.post(url, json={'prompt': prompt, 'number_responses': number_responses})
-#     if response.status_code == 200:
-#         return response.json().get('responses')
-#     else:
-#         return "Error: " + response.text
-
-def query_model(system_prompt, user_prompt, number_responses=1):
+def query_model(chat, number_responses=1):
     url = 'http://127.0.0.1:5000/generate'
 
-    response = requests.post(url, json={'system_prompt': system_prompt, 'user_prompt': user_prompt,
-                                        'number_responses': number_responses})
+    response = requests.post(url, json={'chat': chat, 'number_responses': number_responses})
     if response.status_code == 200:
         return response.json().get('responses')
     else:
         return "Error: " + response.text
+
+# def query_model(system_prompt, user_prompt, number_responses=1):
+#     url = 'http://127.0.0.1:5000/generate'
+#
+#     response = requests.post(url, json={'system_prompt': system_prompt, 'user_prompt': user_prompt,
+#                                         'number_responses': number_responses})
+#     if response.status_code == 200:
+#         return response.json().get('responses')
+#     else:
+#         return "Error: " + response.text
 
 
 @hydra.main(config_path="cfg", config_name="config", version_base="1.1")
@@ -81,9 +81,12 @@ def main(cfg):
     initial_system = initial_system.format(task_reward_signature_string=reward_signature) + code_output_tip
     # initial_user = initial_user.format(task_obs_code_string=task_obs_code_string, task_description=task_description)
     initial_user = initial_user.format(task_obs_code_string=task_obs_code_string, task_description=task_description)
-    combined_user_message = initial_system + "\n" + initial_user
+    # combined_user_message = initial_system + "\n" + initial_user
     # messages = [{"role": "user", "content": combined_user_message}]
+    messages = [{"role": "system", "content": initial_system}, {"role": "user", "content": initial_user}]
 
+    # print(initial_user)
+    # print(initial_system)
     task_code_string = task_code_string.replace(task, task+suffix)
     # Create Task YAML files
     create_task(ISAAC_ROOT_DIR, cfg.env.task, cfg.env.env_name, suffix)
@@ -105,7 +108,7 @@ def main(cfg):
         total_samples = 0
         total_token = 0
         total_completion_token = 0
-        chunk_size = cfg.sample if "gpt-3.5" in model else 4
+        chunk_size = cfg.sample
 
         logging.info(f"Iteration {iter}: Generating {cfg.sample} samples with {cfg.model}")
 
@@ -114,7 +117,9 @@ def main(cfg):
                 break
             for attempt in range(1000):
                 try:
-                    responses = query_model(initial_system,initial_user, chunk_size)
+                    # responses = query_model(initial_system,initial_user, chunk_size)
+                    responses = query_model(messages, chunk_size)
+
                     total_samples += chunk_size
                     break
                 except Exception as e:
@@ -149,6 +154,7 @@ def main(cfg):
             # response_cur = response_cur[start_index + len("[/INST]"):].strip()
             start_index = response_cur.find("<|im_start|> assistant")
             response_cur = response_cur[start_index + len("<|im_start|> assistant"):].strip()
+            # print(response_cur)
 
             # Regex patterns to extract python code enclosed in GPT response
             patterns = [
@@ -334,7 +340,7 @@ def main(cfg):
 
         logging.info(f"Iteration {iter}: Max Success: {max_success}, Execute Rate: {execute_rate}, Max Success Reward Correlation: {max_success_reward_correlation}")
         logging.info(f"Iteration {iter}: Best Generation ID: {best_sample_idx}")
-        logging.info(f"Iteration {iter}: GPT Output Content:\n" +  responses[best_sample_idx]["message"]["content"] + "\n")
+        logging.info(f"Iteration {iter}: GPT Output Content:\n" +  responses[best_sample_idx] + "\n")
         logging.info(f"Iteration {iter}: User Content:\n" + best_content + "\n")
 
         # Plot the success rate
@@ -354,13 +360,14 @@ def main(cfg):
         fig.tight_layout(pad=3.0)
         plt.savefig('summary.png')
         np.savez('summary.npz', max_successes=max_successes, execute_rates=execute_rates, best_code_paths=best_code_paths, max_successes_reward_correlation=max_successes_reward_correlation)
-
+        # print(best_content)
         if len(messages) == 2:
-            messages += [{"role": "assistant", "content": responses[best_sample_idx]["message"]["content"]}]
+            messages += [{"role": "assistant", "content": responses[best_sample_idx]}]
             messages += [{"role": "user", "content": best_content}]
+
         else:
             assert len(messages) == 4
-            messages[-2] = {"role": "assistant", "content": responses[best_sample_idx]["message"]["content"]}
+            messages[-2] = {"role": "assistant", "content": responses[best_sample_idx]}
             messages[-1] = {"role": "user", "content": best_content}
 
         # Save dictionary as JSON file
