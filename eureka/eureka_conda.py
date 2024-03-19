@@ -1,7 +1,7 @@
 import hydra
-import numpy as np 
+import numpy as np
 import json
-import logging 
+import logging
 import matplotlib.pyplot as plt
 import os
 # import openai
@@ -9,9 +9,9 @@ import re
 import subprocess
 from pathlib import Path
 import shutil
-import time 
+import time
 
-from utils.misc import * 
+from utils.misc import *
 from utils.file_utils import find_files_with_substring, load_tensorboard_logs
 from utils.create_task import create_task
 from utils.extract_task_code import *
@@ -19,18 +19,18 @@ from utils.extract_task_code import *
 EUREKA_ROOT_DIR = os.getcwd()
 ISAAC_ROOT_DIR = f"{EUREKA_ROOT_DIR}/../isaacgymenvs/isaacgymenvs"
 
-
 import requests
 
 
 def query_model(chat, number_responses=1):
-    url = 'http://127.0.0.1:5000/generate'
+    url = 'https://0f84-46-193-68-241.ngrok-free.app/generate'
 
     response = requests.post(url, json={'chat': chat, 'number_responses': number_responses})
     if response.status_code == 200:
         return response.json().get('responses')
     else:
         return "Error: " + response.text
+
 
 # def query_model(system_prompt, user_prompt, number_responses=1):
 #     url = 'http://127.0.0.1:5000/generate'
@@ -64,8 +64,8 @@ def main(cfg):
     task_file = f'{EUREKA_ROOT_DIR}/envs/{env_parent}/{env_name}.py'
     task_obs_file = f'{EUREKA_ROOT_DIR}/envs/{env_parent}/{env_name}_obs.py'
     shutil.copy(task_obs_file, f"env_init_obs.py")
-    task_code_string  = file_to_string(task_file)
-    task_obs_code_string  = file_to_string(task_obs_file)
+    task_code_string = file_to_string(task_file)
+    task_obs_code_string = file_to_string(task_obs_file)
     output_file = f"{ISAAC_ROOT_DIR}/tasks/{env_name}{suffix.lower()}.py"
 
     # Loading all text prompts
@@ -81,13 +81,13 @@ def main(cfg):
     initial_system = initial_system.format(task_reward_signature_string=reward_signature) + code_output_tip
     # initial_user = initial_user.format(task_obs_code_string=task_obs_code_string, task_description=task_description)
     initial_user = initial_user.format(task_obs_code_string=task_obs_code_string, task_description=task_description)
-    combined_user_message = initial_system + "\n" + initial_user
+    # combined_user_message = initial_system + "\n" + initial_user
     # messages = [{"role": "user", "content": combined_user_message}]
     messages = [{"role": "system", "content": initial_system}, {"role": "user", "content": initial_user}]
 
     # print(initial_user)
     # print(initial_system)
-    task_code_string = task_code_string.replace(task, task+suffix)
+    task_code_string = task_code_string.replace(task, task + suffix)
     # Create Task YAML files
     create_task(ISAAC_ROOT_DIR, cfg.env.task, cfg.env.env_name, suffix)
 
@@ -98,8 +98,8 @@ def main(cfg):
     best_code_paths = []
     max_success_overall = DUMMY_FAILURE
     max_success_reward_correlation_overall = DUMMY_FAILURE
-    max_reward_code_path = None 
-    
+    max_reward_code_path = None
+
     # Eureka generation loop
     for iter in range(cfg.iteration):
         # Get Eureka response
@@ -126,7 +126,7 @@ def main(cfg):
                     if attempt >= 10:
                         chunk_size = max(int(chunk_size / 2), 1)
                         print("Current Chunk Size", chunk_size)
-                    logging.info(f"Attempt {attempt+1} failed with error: {e}")
+                    logging.info(f"Attempt {attempt + 1} failed with error: {e}")
                     time.sleep(1)
             if not responses:
                 logging.info("Code terminated due to too many failed attempts!")
@@ -193,9 +193,11 @@ def main(cfg):
             indent = " " * 8
             reward_signature = "\n".join([indent + line for line in reward_signature])
             if "def compute_reward(self)" in task_code_string:
-                task_code_string_iter = task_code_string.replace("def compute_reward(self):", "def compute_reward(self):\n" + reward_signature)
+                task_code_string_iter = task_code_string.replace("def compute_reward(self):",
+                                                                 "def compute_reward(self):\n" + reward_signature)
             elif "def compute_reward(self, actions)" in task_code_string:
-                task_code_string_iter = task_code_string.replace("def compute_reward(self, actions):", "def compute_reward(self, actions):\n" + reward_signature)
+                task_code_string_iter = task_code_string.replace("def compute_reward(self, actions):",
+                                                                 "def compute_reward(self, actions):\n" + reward_signature)
             else:
                 raise NotImplementedError
 
@@ -226,9 +228,10 @@ def main(cfg):
                                             'hydra/output=subprocess',
                                             f'task={task}{suffix}', f'wandb_activate={cfg.use_wandb}',
                                             f'wandb_entity={cfg.wandb_username}', f'wandb_project={cfg.wandb_project}',
-                                            f'headless={not cfg.capture_video}', f'capture_video={cfg.capture_video}', 'force_render=False',
+                                            f'headless={not cfg.capture_video}', f'capture_video={cfg.capture_video}',
+                                            'force_render=False',
                                             f'max_iterations={cfg.max_iterations}'],
-                                            stdout=f, stderr=f)
+                                           stdout=f, stderr=f)
             block_until_training(rl_filepath, log_status=True, iter_num=iter, response_id=response_id)
             rl_runs.append(process)
 
@@ -241,17 +244,15 @@ def main(cfg):
 
         exec_success = False
         for response_id, (code_run, rl_run) in enumerate(zip(code_runs, rl_runs)):
-
             rl_run.communicate()
-
             rl_filepath = f"env_iter{iter}_response{response_id}.txt"
             code_paths.append(f"env_iter{iter}_response{response_id}.py")
             try:
                 with open(rl_filepath, 'r') as f:
                     stdout_str = f.read()
-                    print("a7eh4")
             except:
-                content = execution_error_feedback.format(traceback_msg="Code Run cannot be executed due to function signature error! Please re-write an entirely new reward function!")
+                content = execution_error_feedback.format(
+                    traceback_msg="Code Run cannot be executed due to function signature error! Please re-write an entirely new reward function!")
                 content += code_output_tip
                 contents.append(content)
 
@@ -341,9 +342,10 @@ def main(cfg):
         max_successes_reward_correlation.append(max_success_reward_correlation)
         best_code_paths.append(code_paths[best_sample_idx])
 
-        logging.info(f"Iteration {iter}: Max Success: {max_success}, Execute Rate: {execute_rate}, Max Success Reward Correlation: {max_success_reward_correlation}")
+        logging.info(
+            f"Iteration {iter}: Max Success: {max_success}, Execute Rate: {execute_rate}, Max Success Reward Correlation: {max_success_reward_correlation}")
         logging.info(f"Iteration {iter}: Best Generation ID: {best_sample_idx}")
-        logging.info(f"Iteration {iter}: GPT Output Content:\n" +  responses[best_sample_idx] + "\n")
+        logging.info(f"Iteration {iter}: GPT Output Content:\n" + responses[best_sample_idx] + "\n")
         logging.info(f"Iteration {iter}: User Content:\n" + best_content + "\n")
 
         # Plot the success rate
@@ -362,19 +364,18 @@ def main(cfg):
 
         fig.tight_layout(pad=3.0)
         plt.savefig('summary.png')
-        np.savez('summary.npz', max_successes=max_successes, execute_rates=execute_rates, best_code_paths=best_code_paths, max_successes_reward_correlation=max_successes_reward_correlation)
+        np.savez('summary.npz', max_successes=max_successes, execute_rates=execute_rates,
+                 best_code_paths=best_code_paths, max_successes_reward_correlation=max_successes_reward_correlation)
         # print(best_content)
         if len(messages) == 2:
-        # if len(messages) == 1:
             messages += [{"role": "assistant", "content": responses[best_sample_idx]}]
             messages += [{"role": "user", "content": best_content}]
-            logging.info("Adding assistant and user messages to the conversation")
+
         else:
             assert len(messages) == 4
-            # assert len(messages) == 3
             messages[-2] = {"role": "assistant", "content": responses[best_sample_idx]}
             messages[-1] = {"role": "user", "content": best_content}
-            logging.info("Updating assistant and user messages in the conversation")
+
         # Save dictionary as JSON file
         with open('messages.json', 'w') as file:
             json.dump(messages, file, indent=4)
@@ -384,7 +385,8 @@ def main(cfg):
         logging.info("All iterations of code generation failed, aborting...")
         logging.info("Please double check the output env_iter*_response*.txt files for repeating errors!")
         exit()
-    logging.info(f"Task: {task}, Max Training Success {max_success_overall}, Correlation {max_success_reward_correlation_overall}, Best Reward Code Path: {max_reward_code_path}")
+    logging.info(
+        f"Task: {task}, Max Training Success {max_success_overall}, Correlation {max_success_reward_correlation_overall}, Best Reward Code Path: {max_reward_code_path}")
     logging.info(f"Evaluating best reward code {cfg.num_eval} times")
     shutil.copy(max_reward_code_path, output_file)
 
@@ -399,9 +401,10 @@ def main(cfg):
                                         'hydra/output=subprocess',
                                         f'task={task}{suffix}', f'wandb_activate={cfg.use_wandb}',
                                         f'wandb_entity={cfg.wandb_username}', f'wandb_project={cfg.wandb_project}',
-                                        f'headless={not cfg.capture_video}', f'capture_video={cfg.capture_video}', 'force_render=False', f'seed={i}',
+                                        f'headless={not cfg.capture_video}', f'capture_video={cfg.capture_video}',
+                                        'force_render=False', f'seed={i}',
                                         ],
-                                        stdout=f, stderr=f)
+                                       stdout=f, stderr=f)
 
         block_until_training(rl_filepath)
         eval_runs.append(process)
@@ -428,9 +431,12 @@ def main(cfg):
             reward_correlation = np.corrcoef(gt_reward, gpt_reward)[0, 1]
             reward_code_correlations_final.append(reward_correlation)
 
-    logging.info(f"Final Success Mean: {np.mean(reward_code_final_successes)}, Std: {np.std(reward_code_final_successes)}, Raw: {reward_code_final_successes}")
-    logging.info(f"Final Correlation Mean: {np.mean(reward_code_correlations_final)}, Std: {np.std(reward_code_correlations_final)}, Raw: {reward_code_correlations_final}")
-    np.savez('final_eval.npz', reward_code_final_successes=reward_code_final_successes, reward_code_correlations_final=reward_code_correlations_final)
+    logging.info(
+        f"Final Success Mean: {np.mean(reward_code_final_successes)}, Std: {np.std(reward_code_final_successes)}, Raw: {reward_code_final_successes}")
+    logging.info(
+        f"Final Correlation Mean: {np.mean(reward_code_correlations_final)}, Std: {np.std(reward_code_correlations_final)}, Raw: {reward_code_correlations_final}")
+    np.savez('final_eval.npz', reward_code_final_successes=reward_code_final_successes,
+             reward_code_correlations_final=reward_code_correlations_final)
 
 
 if __name__ == "__main__":

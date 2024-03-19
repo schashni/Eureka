@@ -112,6 +112,14 @@ class CartpoleGPT(VecTask):
         self.obs_buf[env_ids, 1] = self.dof_vel[env_ids, 0].squeeze()
         self.obs_buf[env_ids, 2] = self.dof_pos[env_ids, 1].squeeze()
         self.obs_buf[env_ids, 3] = self.dof_vel[env_ids, 1].squeeze()
+        self.object_pos = self.obs_buf.clone()
+
+        # Goal state (stationary cart at center, upright and stationary pole)
+        goal_cart_pos = 0
+        goal_cart_vel = 0
+        goal_pole_angle = np.pi / 2  # Upright pole
+        goal_pole_ang_vel = 0
+        self.goal_pos = torch.tensor([[goal_cart_pos, goal_cart_vel, goal_pole_angle, goal_pole_ang_vel]] * self.num_envs, device=self.device)
 
         return self.obs_buf
 
@@ -174,20 +182,13 @@ import torch
 from torch import Tensor
 @torch.jit.script
 def compute_reward(object_pos: torch.Tensor, goal_pos: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-    # Normalize pole position to range [0, 1]
-    object_pos_norm = (object_pos - goal_pos) / (goal_pos.max() - goal_pos.min())
-
-    # Reward for keeping the pole upright
-    reward_upright = torch.nn.functional.smooth_L1(object_pos_norm, beta=1.0)
-
-    # Penalize distance from the goal position
-    reward_distance = -torch.nn.functional.l1_loss(object_pos, goal_pos)
-
-    # Reward for staying on the track
-    reward_track = torch.nn.functional.smooth_L1(object_pos_norm, beta=1.0)
-
-    # Total reward
-    reward = reward_upright + reward_distance + reward_track
-
-    # Return reward and components
-    return reward, {"reward_upright": reward_upright, "reward_distance": reward_distance, "reward_track": reward_track}
+    reward = torch.stack(
+        [
+            -(object_pos[:, 0].abs() - 0.5) ** 2,  # Cart position reward: closer to center becomes higher reward
+            (object_pos[:, 1]) ** 2,  # Cart velocity reward: positive if forward, negative if backward
+            (goal_pos[:, 2] - object_pos[:, 2]).abs() - 1,  # Pole angle reward: closer to upright becomes higher reward
+            (goal_pos[:, 3] - object_pos[:, 3]) ** 2,  # Pole angular velocity reward: closer to 0 becomes higher reward
+        ],
+        dim=2,
+    ).sum(-1)
+    return reward, {}
