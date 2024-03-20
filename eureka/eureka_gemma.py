@@ -23,24 +23,24 @@ ISAAC_ROOT_DIR = f"{EUREKA_ROOT_DIR}/../isaacgymenvs/isaacgymenvs"
 import requests
 
 
-# def query_model(prompt, number_responses=1):
-#     url = 'http://127.0.0.1:5000/generate'
-#
-#     response = requests.post(url, json={'prompt': prompt, 'number_responses': number_responses})
-#     if response.status_code == 200:
-#         return response.json().get('responses')
-#     else:
-#         return "Error: " + response.text
-
-def query_model(system_prompt, user_prompt, number_responses=1):
+def query_model(chat, number_responses=1):
     url = 'http://127.0.0.1:5000/generate'
 
-    response = requests.post(url, json={'system_prompt': system_prompt, 'user_prompt': user_prompt,
-                                        'number_responses': number_responses})
+    response = requests.post(url, json={'chat': chat, 'number_responses': number_responses})
     if response.status_code == 200:
         return response.json().get('responses')
     else:
         return "Error: " + response.text
+
+# def query_model(system_prompt, user_prompt, number_responses=1):
+#     url = 'http://127.0.0.1:5000/generate'
+#
+#     response = requests.post(url, json={'system_prompt': system_prompt, 'user_prompt': user_prompt,
+#                                         'number_responses': number_responses})
+#     if response.status_code == 200:
+#         return response.json().get('responses')
+#     else:
+#         return "Error: " + response.text
 
 
 @hydra.main(config_path="cfg", config_name="config", version_base="1.1")
@@ -82,8 +82,11 @@ def main(cfg):
     # initial_user = initial_user.format(task_obs_code_string=task_obs_code_string, task_description=task_description)
     initial_user = initial_user.format(task_obs_code_string=task_obs_code_string, task_description=task_description)
     combined_user_message = initial_system + "\n" + initial_user
-    # messages = [{"role": "user", "content": combined_user_message}]
+    messages = [{"role": "user", "content": combined_user_message}]
+    # messages = [{"role": "system", "content": initial_system}, {"role": "user", "content": initial_user}]
 
+    # print(initial_user)
+    # print(initial_system)
     task_code_string = task_code_string.replace(task, task+suffix)
     # Create Task YAML files
     create_task(ISAAC_ROOT_DIR, cfg.env.task, cfg.env.env_name, suffix)
@@ -105,7 +108,7 @@ def main(cfg):
         total_samples = 0
         total_token = 0
         total_completion_token = 0
-        chunk_size = cfg.sample if "gpt-3.5" in model else 4
+        chunk_size = cfg.sample
 
         logging.info(f"Iteration {iter}: Generating {cfg.sample} samples with {cfg.model}")
 
@@ -114,7 +117,9 @@ def main(cfg):
                 break
             for attempt in range(1000):
                 try:
-                    responses = query_model(initial_system,initial_user, chunk_size)
+                    # responses = query_model(initial_system,initial_user, chunk_size)
+                    responses = query_model(messages, chunk_size)
+                    # logging.info(f"Iteration {iter}: Response {responses}")
                     total_samples += chunk_size
                     break
                 except Exception as e:
@@ -143,12 +148,13 @@ def main(cfg):
         for response_id, response in enumerate(responses):
             response_cur = response
             logging.info(f"Iteration {iter}: Processing Code Run {response_id}")
-            # start_index = response_cur.find("<start_of_turn>model")
-            # response_cur = response_cur[start_index + len("<start_of_turn>model"):].strip()
+            start_index = response_cur.find("<start_of_turn>model")
+            response_cur = response_cur[start_index + len("<start_of_turn>model"):].strip()
             # start_index = response_cur.find("[/INST]")
             # response_cur = response_cur[start_index + len("[/INST]"):].strip()
-            start_index = response_cur.find("<|im_start|> assistant")
-            response_cur = response_cur[start_index + len("<|im_start|> assistant"):].strip()
+            # start_index = response_cur.find("<|im_start|> assistant")
+            # response_cur = response_cur[start_index + len("<|im_start|> assistant"):].strip()
+            # print(response_cur)
 
             # Regex patterns to extract python code enclosed in GPT response
             patterns = [
@@ -172,6 +178,7 @@ def main(cfg):
                     code_string = "\n".join(lines[i:])
 
             # Add the Eureka Reward Signature to the environment code
+            # logging.info(code_string)
             try:
                 gpt_reward_signature, input_lst = get_function_signature(code_string)
             except Exception as e:
@@ -235,12 +242,15 @@ def main(cfg):
 
         exec_success = False
         for response_id, (code_run, rl_run) in enumerate(zip(code_runs, rl_runs)):
+
             rl_run.communicate()
+
             rl_filepath = f"env_iter{iter}_response{response_id}.txt"
             code_paths.append(f"env_iter{iter}_response{response_id}.py")
             try:
                 with open(rl_filepath, 'r') as f:
                     stdout_str = f.read()
+                    print("a7eh4")
             except:
                 content = execution_error_feedback.format(traceback_msg="Code Run cannot be executed due to function signature error! Please re-write an entirely new reward function!")
                 content += code_output_tip
@@ -334,7 +344,7 @@ def main(cfg):
 
         logging.info(f"Iteration {iter}: Max Success: {max_success}, Execute Rate: {execute_rate}, Max Success Reward Correlation: {max_success_reward_correlation}")
         logging.info(f"Iteration {iter}: Best Generation ID: {best_sample_idx}")
-        logging.info(f"Iteration {iter}: GPT Output Content:\n" +  responses[best_sample_idx]["message"]["content"] + "\n")
+        logging.info(f"Iteration {iter}: GPT Output Content:\n" +  responses[best_sample_idx] + "\n")
         logging.info(f"Iteration {iter}: User Content:\n" + best_content + "\n")
 
         # Plot the success rate
@@ -354,16 +364,20 @@ def main(cfg):
         fig.tight_layout(pad=3.0)
         plt.savefig('summary.png')
         np.savez('summary.npz', max_successes=max_successes, execute_rates=execute_rates, best_code_paths=best_code_paths, max_successes_reward_correlation=max_successes_reward_correlation)
-
-        if len(messages) == 2:
-            messages += [{"role": "assistant", "content": responses[best_sample_idx]["message"]["content"]}]
+        # print(best_content)
+        # if len(messages) == 2:
+        if len(messages) == 1:
+            messages += [{"role": "assistant", "content": responses[best_sample_idx]}]
             messages += [{"role": "user", "content": best_content}]
+            logging.info("Adding assistant and user messages to the conversation")
         else:
-            assert len(messages) == 4
-            messages[-2] = {"role": "assistant", "content": responses[best_sample_idx]["message"]["content"]}
+            # assert len(messages) == 4
+            assert len(messages) == 3
+            messages[-2] = {"role": "assistant", "content": responses[best_sample_idx]}
             messages[-1] = {"role": "user", "content": best_content}
-
+            logging.info("Updating assistant and user messages in the conversation")
         # Save dictionary as JSON file
+        # logging.info(messages)
         with open('messages.json', 'w') as file:
             json.dump(messages, file, indent=4)
 

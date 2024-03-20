@@ -18,16 +18,16 @@ model = AutoModelForCausalLM.from_pretrained(
 def generate():
     try:
         data = request.json
-        prompt = data['prompt']
+        chat = data['chat']
         
         n_return_sequences = data['number_responses']
     
 
-        messages = [{"role": "user", "content": prompt}]
+        #messages = [{"role": "user", "content": prompt}]
         # Add your generation logic here
         # ...
         # For example:
-        prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        prompt = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
     
 
         inputs = tokenizer.encode(prompt,return_tensors="pt")
