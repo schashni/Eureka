@@ -182,13 +182,20 @@ import torch
 from torch import Tensor
 @torch.jit.script
 def compute_reward(object_pos: torch.Tensor, goal_pos: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-    reward = torch.stack(
-        [
-            -(object_pos[:, 0].abs() - 0.5) ** 2,  # Cart position reward: closer to center becomes higher reward
-            (object_pos[:, 1]) ** 2,  # Cart velocity reward: positive if forward, negative if backward
-            (goal_pos[:, 2] - object_pos[:, 2]).abs() - 1,  # Pole angle reward: closer to upright becomes higher reward
-            (goal_pos[:, 3] - object_pos[:, 3]) ** 2,  # Pole angular velocity reward: closer to 0 becomes higher reward
-        ],
-        dim=2,
-    ).sum(-1)
-    return reward, {}
+    # Calculate the distance between the object and the goal position
+    distance = torch.norm(object_pos - goal_pos, dim=1)
+
+    # Penalize the object being too far from the goal
+    distance_penalty = -10 * torch.max(0, distance - 0.2)
+
+    # Penalize the pole being too far from upright
+    pole_angle_penalty = -20 * torch.abs(torch.atan(object_pos[2]) - torch.atan(goal_pos[2]))
+
+    # Reward for reaching the goal
+    goal_reward = 10 if object_pos[0] >= goal_pos[0] else 0
+
+    # Normalize the overall reward to a range between -1 and 1
+    total_reward = (goal_reward - distance_penalty - pole_angle_penalty) / 10
+
+    # Return the total reward and individual components
+    return total_reward, {"distance_penalty": distance_penalty, "pole_angle_penalty": pole_angle_penalty, "goal_reward": goal_reward}
