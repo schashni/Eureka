@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - env: shadow_hand
+  - env: cartpole
   - override hydra/launcher: local
   - override hydra/output: local
 
@@ -9,15 +9,15 @@ hydra:
     chdir: True
 
 # LLM parameters
-model: gpt-4-0314  # LLM model (other options are gpt-4, gpt-4-0613, gpt-3.5-turbo-16k-0613)
+model: gemma-7b-it  # LLM model (other options are gpt-4, gpt-4-0613, gpt-3.5-turbo-16k-0613)
 temperature: 1.0
 suffix: GPT  # suffix for generated files (indicates LLM model)
 
 # Eureka parameters
 iteration: 1 # how many iterations of Eureka to run
 sample: 3 # number of Eureka samples to generate per iteration
-max_iterations: 3000 # RL Policy training iterations (decrease this to make the feedback loop faster)
-num_eval: 5 # number of evaluation episodes to run for the final reward
+max_iterations: 1000 # RL Policy training iterations (decrease this to make the feedback loop faster)
+num_eval: 2 # number of evaluation episodes to run for the final reward
 capture_video: False # whether to capture policy rollout videos
 
 # Weights and Biases

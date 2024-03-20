@@ -6,7 +6,7 @@ import torch
 from isaacgym import gymutil, gymtorch, gymapi
 from .base.vec_task import VecTask
 
-class Cartpole(VecTask):
+class CartpoleGPT(VecTask):
 
     def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render):
         self.cfg = cfg
@@ -87,6 +87,9 @@ class Cartpole(VecTask):
             self.cartpole_handles.append(cartpole_handle)
 
     def compute_reward(self):
+        self.rew_buf[:], self.rew_dict = compute_reward(self.object_pos, self.goal_pos)
+        self.extras['gpt_reward'] = self.rew_buf.mean()
+        for rew_state in self.rew_dict: self.extras[rew_state] = self.rew_dict[rew_state].mean()
         pole_angle = self.obs_buf[:, 2]
         pole_vel = self.obs_buf[:, 3]
         cart_vel = self.obs_buf[:, 1]
@@ -172,3 +175,19 @@ def compute_success(pole_angle, pole_vel, cart_vel, cart_pos,
     else:
         consecutive_successes = torch.zeros_like(consecutive_successes).mean()
     return reward, reset, consecutive_successes
+
+from typing import Tuple, Dict
+import math
+import torch
+from torch import Tensor
+@torch.jit.script
+def compute_reward(object_pos: torch.Tensor, goal_pos: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    # Normalize rewards to a range between -1 and 1
+    total_reward = torch.tanh(0.1 * (object_pos[0] - goal_pos[0]))
+
+    # Reward components
+    cart_reward = 0.2 * torch.tanh(0.2 * object_pos[0])
+    pole_reward = 0.1 * torch.tanh(0.2 * object_pos[2])
+
+    # Add rewards and return them in a dictionary
+    return total_reward, {"cart_reward": cart_reward, "pole_reward": pole_reward}

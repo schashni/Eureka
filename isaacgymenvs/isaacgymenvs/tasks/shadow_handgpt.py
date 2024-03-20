@@ -367,7 +367,7 @@ class ShadowHandGPT(VecTask):
         self.goal_object_indices = to_torch(self.goal_object_indices, dtype=torch.long, device=self.device)
 
     def compute_reward(self, actions):
-        self.rew_buf[:], self.rew_dict = compute_reward(self.object_rot, self.goal_rot, self.fingertip_pos, self.object_pos)
+        self.rew_buf[:], self.rew_dict = compute_reward(self.object_pose, self.goal_pose)
         self.extras['gpt_reward'] = self.rew_buf.mean()
         for rew_state in self.rew_dict: self.extras[rew_state] = self.rew_dict[rew_state].mean()
         self.rew_buf[:] = compute_bonus(
@@ -763,32 +763,21 @@ import math
 import torch
 from torch import Tensor
 @torch.jit.script
-def compute_reward(object_rot: torch.Tensor, goal_rot: torch.Tensor, fingertip_pos: torch.Tensor, object_pos: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-    device = object_rot.device
-    
-    # Distance between object rotation and goal rotation
-    object_goal_rot_diff = torch.norm(object_rot - goal_rot, dim=1)
-    
-    # Distance between each fingertip and the object
-    fingertip_object_diff = torch.norm(fingertip_pos - object_pos.unsqueeze(1), dim=2)
-    avg_fingertip_object_diff = fingertip_object_diff.mean(dim=1)
-    
-    # Reward Components
-    rot_reward = -object_goal_rot_diff
-    fingertip_reward = -avg_fingertip_object_diff
-    
-    # Temperature parameters for reward normalization
-    rot_temperature = torch.tensor(1.0).to(device)
-    fingertip_temperature = torch.tensor(1.0).to(device)
-    
-    # Normalize reward components using exponential function
-    rot_reward_normalized = torch.exp(rot_reward / rot_temperature)
-    fingertip_reward_normalized = torch.exp(fingertip_reward / fingertip_temperature)
-    
-    # Combine normalized rewards
-    total_reward = rot_reward_normalized + fingertip_reward_normalized
-    
-    # Store individual reward components in a dictionary
-    reward_dict = {"rot_reward": rot_reward_normalized, "fingertip_reward": fingertip_reward_normalized}
-    
-    return total_reward, reward_dict
+def compute_reward(object_pose: torch.Tensor, goal_pose: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    # Calculate the angle difference between the current object pose and the goal pose (phi and theta)
+    phi_dif = torch.acos(torch.clip(torch.dot(object_pose[:, 3:4], goal_pose[:, 3:4]), -1.0, 1.0))
+    theta_dif = torch.acos(torch.clip(torch.dot(object_pose[:, 4:5], goal_pose[:, 4:5]), -1.0, 1.0))
+
+    # Determine the reward components for phi and theta
+    phi_reward = -torch. Pow(phi_dif - pi/4, 2)  # -1 if completely different, 0 if the same
+    theta_reward = -torch. Pow(theta_dif - pi/4, 2)  # -1 if completely different, 0 if the same
+
+    # Decide the weights for the individual reward components
+    phi_weight = 0.7
+    theta_weight = 0.3
+
+    # Calculate the total reward by combining the reward components
+    total_reward = phi_weight * phi_reward + theta_weight * theta_reward
+
+    # Return the total reward and individual reward components as a tuple
+    return total_reward, {"phi_dif": phi_dif, "theta_dif": theta_dif, "phi_reward": phi_reward, "theta_reward": theta_reward}
