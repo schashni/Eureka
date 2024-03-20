@@ -131,6 +131,14 @@ def main(cfg):
             if not responses:
                 logging.info("Code terminated due to too many failed attempts!")
                 exit()
+        responses_temp= []
+        for response in responses:
+            start_index = response.rfind("<start_of_turn>model")
+            response = response[start_index + len("<start_of_turn>model"):].strip()
+            responses_temp.append(response)
+        responses = responses_temp
+        # print(responses)
+
 
             # responses.extend(response_cur["choices"])
             # prompt_tokens = response_cur["usage"]["prompt_tokens"]
@@ -148,8 +156,8 @@ def main(cfg):
         for response_id, response in enumerate(responses):
             response_cur = response
             logging.info(f"Iteration {iter}: Processing Code Run {response_id}")
-            start_index = response_cur.rfind("<start_of_turn>model")
-            response_cur = response_cur[start_index + len("<start_of_turn>model"):].strip()
+            # start_index = response_cur.rfind("<start_of_turn>model")
+            # response_cur = response_cur[start_index + len("<start_of_turn>model"):].strip()
             # start_index = response_cur.find("[/INST]")
             # response_cur = response_cur[start_index + len("[/INST]"):].strip()
             # start_index = response_cur.find("<|im_start|> assistant")
