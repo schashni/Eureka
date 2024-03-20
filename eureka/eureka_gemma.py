@@ -148,7 +148,7 @@ def main(cfg):
         for response_id, response in enumerate(responses):
             response_cur = response
             logging.info(f"Iteration {iter}: Processing Code Run {response_id}")
-            start_index = response_cur.find("<start_of_turn>model")
+            start_index = response_cur.rfind("<start_of_turn>model")
             response_cur = response_cur[start_index + len("<start_of_turn>model"):].strip()
             # start_index = response_cur.find("[/INST]")
             # response_cur = response_cur[start_index + len("[/INST]"):].strip()
@@ -377,7 +377,7 @@ def main(cfg):
             messages[-1] = {"role": "user", "content": best_content}
             logging.info("Updating assistant and user messages in the conversation")
         # Save dictionary as JSON file
-        # logging.info(messages)
+        logging.info(messages)
         with open('messages.json', 'w') as file:
             json.dump(messages, file, indent=4)
 
