@@ -87,7 +87,7 @@ class CartpoleGPT(VecTask):
             self.cartpole_handles.append(cartpole_handle)
 
     def compute_reward(self):
-        self.rew_buf[:], self.rew_dict = compute_reward(self.object_pos, self.goal_pos)
+        self.rew_buf[:], self.rew_dict = compute_reward(self.dof_pos, self.dof_vel)
         self.extras['gpt_reward'] = self.rew_buf.mean()
         for rew_state in self.rew_dict: self.extras[rew_state] = self.rew_dict[rew_state].mean()
         pole_angle = self.obs_buf[:, 2]
@@ -112,15 +112,6 @@ class CartpoleGPT(VecTask):
         self.obs_buf[env_ids, 1] = self.dof_vel[env_ids, 0].squeeze()
         self.obs_buf[env_ids, 2] = self.dof_pos[env_ids, 1].squeeze()
         self.obs_buf[env_ids, 3] = self.dof_vel[env_ids, 1].squeeze()
-        self.object_pos = self.obs_buf.clone()
-
-        # Goal state (stationary cart at center, upright and stationary pole)
-        goal_cart_pos = 0
-        goal_cart_vel = 0
-        goal_pole_angle = np.pi / 2  # Upright pole
-        goal_pole_ang_vel = 0
-        self.goal_pos = torch.tensor([[goal_cart_pos, goal_cart_vel, goal_pole_angle, goal_pole_ang_vel]] * self.num_envs, device=self.device)
-
         return self.obs_buf
 
     def reset_idx(self, env_ids):
@@ -181,13 +172,12 @@ import math
 import torch
 from torch import Tensor
 @torch.jit.script
-def compute_reward(object_pos: torch.Tensor, goal_pos: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-    # Normalize rewards to a range between -1 and 1
-    total_reward = torch.tanh(0.1 * (object_pos[0] - goal_pos[0]))
+def compute_reward(dof_pos: torch.Tensor, dof_vel: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    # Normalize the reward to a fixed range
+    total_reward = (dof_pos[:, 0] - self.target_position) ** 2 + 1000 * (dof_vel[:, 0] ** 2)
 
-    # Reward components
-    cart_reward = 0.2 * torch.tanh(0.2 * object_pos[0])
-    pole_reward = 0.1 * torch.tanh(0.2 * object_pos[2])
+    # Each component has its own temperature parameter
+    reward_components = {"position": (total_reward - self.base_reward) / self.reward_scale,
+                           "velocity": 1000 * (dof_vel[:, 0] ** 2) / self.reward_scale}
 
-    # Add rewards and return them in a dictionary
-    return total_reward, {"cart_reward": cart_reward, "pole_reward": pole_reward}
+    return total_reward, reward_components
