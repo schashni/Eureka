@@ -132,10 +132,12 @@ def launch_rlg_hydra(cfg: DictConfig):
                     video_length=cfg.capture_video_len,
                 )
             else:
+
                 envs = gym.wrappers.RecordVideo(
                     envs,
                     f"videos/{run_name}",
                     step_trigger=lambda step: (step % cfg.capture_video_freq == 0) and (step > 0),
+                    # step_trigger=lambda step: print(f"Video capture triggered at step: {step}") or ((step % cfg.capture_video_freq == 0) and (step > 0)),
                     video_length=cfg.capture_video_len,
                 )
         return envs
