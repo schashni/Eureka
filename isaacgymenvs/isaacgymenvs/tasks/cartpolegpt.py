@@ -173,11 +173,22 @@ import torch
 from torch import Tensor
 @torch.jit.script
 def compute_reward(dof_pos: torch.Tensor, dof_vel: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-    # Normalize the reward to a fixed range
-    total_reward = (dof_pos[:, 0] - self.target_position) ** 2 + 1000 * (dof_vel[:, 0] ** 2)
+    # Balance pole upright
+    reward_balance = -(torch.abs(dof_pos[:, 1]) - 1.)
 
-    # Each component has its own temperature parameter
-    reward_components = {"position": (total_reward - self.base_reward) / self.reward_scale,
-                           "velocity": 1000 * (dof_vel[:, 0] ** 2) / self.reward_scale}
+    # Encourage pole to move towards the target position
+    target_distance = 0.5  # Can be adjusted
+    reward_position = torch.tanh(target_distance - torch.norm(dof_pos, dim=1))
 
-    return total_reward, reward_components
+    # Penalize fast cart movement
+    reward_speed = -torch.abs(dof_vel[:, 0])
+
+    # Combine components
+    total_reward = reward_balance + reward_position + reward_speed
+
+    # Return total reward and components
+    return total_reward, {
+        "balance": reward_balance,
+        "position": reward_position,
+        "speed": reward_speed,
+    }

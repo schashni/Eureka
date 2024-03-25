@@ -235,7 +235,7 @@ def main(cfg):
                                             'hydra/output=subprocess',
                                             f'task={task}{suffix}', f'wandb_activate={cfg.use_wandb}',
                                             f'wandb_entity={cfg.wandb_username}', f'wandb_project={cfg.wandb_project}',
-                                            f'headless={not cfg.capture_video}', f'capture_video={cfg.capture_video}', 'force_render=False',
+                                            f'headless={cfg.headless}', f'capture_video={cfg.capture_video}', f'force_render={cfg.force_render}',
                                             f'max_iterations={cfg.max_iterations}'],
                                             stdout=f, stderr=f)
             block_until_training(rl_filepath, log_status=True, iter_num=iter, response_id=response_id)
